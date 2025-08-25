@@ -1,4 +1,3 @@
-cat > app/api/stripe/webhook/route.ts << 'EOF'
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { Resend } from 'resend';
