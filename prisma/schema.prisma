@@ -7,20 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Plan {
-  FREE
-  PRO
-  PLUS
-  TEAM
-}
-
-enum ExerciseType {
-  MULTIPLE_CHOICE
-  FILL_IN_BLANK
-  SPEAKING
-  WRITING
-}
-
 model User {
   id               String         @id @default(cuid())
   email            String?        @unique
@@ -28,7 +14,7 @@ model User {
   image            String?
   createdAt        DateTime       @default(now())
   stripeCustomerId String?
-  plan             Plan           @default(FREE)
+  plan             String         @default("FREE")  // 原本 enum Plan
 
   subscription     Subscription?
   progress         Progress[]
@@ -48,8 +34,8 @@ model Subscription {
 model Course {
   id          String   @id @default(cuid())
   title       String
-  level       String   // A1-C2
-  difficulty  String   // Beginner / Intermediate / Advanced
+  level       String            // A1-C2
+  difficulty  String            // Beginner / Intermediate / Advanced
   isPremium   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
@@ -75,13 +61,13 @@ model Lesson {
 }
 
 model Exercise {
-  id        String       @id @default(cuid())
-  type      ExerciseType
-  content   Json
+  id        String   @id @default(cuid())
+  type      String                 // 原本 enum ExerciseType
+  content   String                 // 原本 Json（存 JSON 字串）
   audioUrl  String?
   lessonId  String
 
-  lesson    Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@index([lessonId])
 }
