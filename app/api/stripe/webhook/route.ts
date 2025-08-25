@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { Resend } from 'resend';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { billingEmailTemplate } from '@/lib/emailTemplates';
 
-export const config = { api: { bodyParser: false } } as any;
+export const config = {
+  api: { bodyParser: false }
+};
 export const dynamic = 'force-dynamic';
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY as string;
@@ -43,8 +45,7 @@ export async function POST(req: NextRequest) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = session.customer as string | null;
-        const email = (session.customer_details?.email ||
-          (typeof session.customer === 'string' ? undefined : undefined)) as string | undefined;
+        const email = session.customer_details?.email as string | undefined;
 
         let user = email ? await prisma.user.findUnique({ where: { email } }) : null;
         if (!user && email) {
@@ -62,11 +63,7 @@ export async function POST(req: NextRequest) {
           await prisma.subscription.upsert({
             where: { userId: user.id },
             update: { status: 'active' },
-            create: {
-              userId: user.id,
-              status: 'active',
-              priceId: null
-            }
+            create: { userId: user.id, status: 'active', priceId: null }
           });
 
           await notify(email, '訂閱啟用成功', '感謝您的訂閱', '您的 Pro 訂閱已啟用。');
@@ -98,23 +95,14 @@ export async function POST(req: NextRequest) {
             });
           }
 
-          const email =
-            user.email ||
-            (typeof sub.customer === 'string' ? undefined : undefined);
-
-          await notify(
-            email,
-            '訂閱狀態更新',
-            '訂閱已更新',
-            `目前狀態：${status}`
-          );
+          const email = user.email;
+          await notify(email, '訂閱狀態更新', '訂閱已更新', `目前狀態：${status}`);
         }
         break;
       }
 
-      default: {
+      default:
         break;
-      }
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
