@@ -1,5 +1,5 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic'import { NextRequest, NextResponse } from 'next/server';
+cat > app/api/stripe/webhook/route.ts << 'EOF'
+import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { Resend } from 'resend';
 import { prisma } from '@/lib/prisma';
@@ -56,57 +56,31 @@ export async function POST(req: NextRequest) {
         if (user && customerId) {
           await prisma.user.update({
             where: { id: user.id },
-            data: { stripeCustomerId: customerId, plan: 'PRO' }
+            data: { stripeCustomerId: customerId }
           });
-
-          await prisma.subscription.upsert({
-            where: { userId: user.id },
-            update: { status: 'active' },
-            create: { userId: user.id, status: 'active', priceId: null }
-          });
-
-          await notify(email, '訂閱啟用成功', '感謝您的訂閱', '您的 Pro 訂閱已啟用。');
         }
+
         break;
       }
 
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription;
+        const stripeSubId = sub.id;
         const status = sub.status;
-        const currentPeriodEnd = new Date((sub.current_period_end || 0) * 1000);
-        const customerId = sub.customer as string;
+        const currentPeriodEnd = new Date(sub.current_period_end * 1000);
 
-        const user = await prisma.user.findFirst({
-          where: { stripeCustomerId: customerId }
+        await prisma.subscription.updateMany({
+          where: { stripeSubId },
+          data: { status, currentPeriodEnd }
         });
-
-        if (user) {
-          await prisma.subscription.updateMany({
-            where: { userId: user.id },
-            data: { status, currentPeriodEnd }
-          });
-
-          if (event.type === 'customer.subscription.deleted') {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { plan: 'FREE' }
-            });
-          }
-
-          const email = user.email;
-          await notify(email, '訂閱狀態更新', '訂閱已更新', `目前狀態：${status}`);
-        }
         break;
       }
-
-      default:
-        break;
     }
 
-    return NextResponse.json({ received: true }, { status: 200 });
-  } catch (e: any) {
-    console.error('Webhook handler error:', e);
-    return new NextResponse('Internal Server Error', { status: 500 });
+    return new NextResponse('Webhook received', { status: 200 });
+  } catch (err: any) {
+    console.error('Webhook handler error:', err);
+    return new NextResponse('Internal server error', { status: 500 });
   }
 }
