@@ -1,30 +1,49 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "sqlite"; url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+  PLUS
+  TEAM
+}
+
+enum ExerciseType {
+  MULTIPLE_CHOICE
+  FILL_IN_BLANK
+  SPEAKING
+  WRITING
+}
 
 model User {
-  id                String   @id @default(cuid())
-  email             String?  @unique
-  name              String?
-  image             String?
-  createdAt         DateTime @default(now())
-  stripeCustomerId  String?
-  plan              Plan     @default(FREE)
-  subscription      Subscription?
-  progress          Progress[]
-  studyLogs         StudyLog[]
+  id               String         @id @default(cuid())
+  email            String?        @unique
+  name             String?
+  image            String?
+  createdAt        DateTime       @default(now())
+  stripeCustomerId String?
+  plan             Plan           @default(FREE)
+
+  subscription     Subscription?
+  progress         Progress[]
+  studyLogs        StudyLog[]
 }
 
 model Subscription {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  stripeSubId     String   @unique
-  plan            Plan
-  status          String
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  status           String?
+  priceId          String?
   currentPeriodEnd DateTime?
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
 
-enum Plan { FREE PRO PLUS TEAM }
+  user             User      @relation(fields: [userId], references: [id])
+}
 
 model Course {
   id          String   @id @default(cuid())
@@ -33,23 +52,27 @@ model Course {
   difficulty  String   // Beginner / Intermediate / Advanced
   isPremium   Boolean  @default(false)
   createdAt   DateTime @default(now())
+
   lessons     Lesson[]
 }
 
 model Lesson {
-  id          String   @id @default(cuid())
-  title       String
-  order       Int      @default(1)
-  courseId    String
-  requiresLessonId String?
-  minScoreToUnlock Int @default(0)
-  audioUrl    String?
-  captionsVtt String?
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  exercises   Exercise[]
-}
+  id                String     @id @default(cuid())
+  courseId          String
+  title             String
+  order             Int        @default(0)
 
-enum ExerciseType { dialog grammar pron quiz }
+  // 解鎖條件
+  requiresLessonId  String?
+  minScoreToUnlock  Int?       @default(0)
+
+  course            Course     @relation(fields: [courseId], references: [id])
+  exercises         Exercise[]
+  progress          Progress[]
+
+  @@index([courseId])
+  @@index([requiresLessonId])
+}
 
 model Exercise {
   id        String       @id @default(cuid())
@@ -57,24 +80,39 @@ model Exercise {
   content   Json
   audioUrl  String?
   lessonId  String
+
   lesson    Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
 }
 
 model Progress {
-  id        String   @id @default(cuid())
-  userId    String
-  lessonId  String
-  score     Int      @default(0)
-  xp        Int      @default(0)
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  userId          String
+  lessonId        String
+  score           Int       @default(0)
+
+  fluency         Float?
+  pronunciation   Float?
+  grammar         Float?
+
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id])
+  lesson          Lesson    @relation(fields: [lessonId], references: [id])
+
+  @@index([userId])
+  @@index([lessonId])
+  @@unique([userId, lessonId])
 }
 
 model StudyLog {
   id        String   @id @default(cuid())
   userId    String
-  minutes   Int
-  date      DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  minutes   Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
