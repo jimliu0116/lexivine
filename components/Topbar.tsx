@@ -1,0 +1,4 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { BRAND } from '@/brand.config'
+export default function Topbar(){ const [session,setSession]=useState<any>(null); useEffect(()=>{ fetch('/api/auth/session').then(r=>r.json()).then(s=>setSession(Object.keys(s||{}).length? s : null)).catch(()=>{}) },[]); return (<div className='sticky top-0 z-20 backdrop-blur bg-white/70 border-b'><div className='max-w-6xl mx-auto px-4 py-3 flex items-center justify-between'><div className='flex items-center gap-3'><img src='/logo.svg' className='h-9 w-9 rounded-2xl shadow'/><div className='font-semibold'>{BRAND.name}</div></div><div className='flex items-center gap-2 text-sm'><a className='pill px-3 py-1.5 border' href='/pricing'>升級方案</a>{session? (<a className='pill px-3 py-1.5 border' href='/api/auth/signout?callbackUrl=/'>登出</a>):(<a className='pill px-3 py-1.5 gbtn' href='/api/auth/signin'>登入</a>)}</div></div></div>) }
