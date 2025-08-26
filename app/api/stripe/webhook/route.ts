@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { Resend } from 'resend';
 import { prisma } from '@/lib/prisma';
-import { billingEmailTemplate } from '@/lib/emailTemplates';
 
-export const runtime = 'nodejs';
+export const config = { api: { bodyParser: false } };
 export const dynamic = 'force-dynamic';
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY as string;
@@ -20,7 +19,14 @@ async function notify(to: string | null | undefined, subject: string, title: str
       from: process.env.EMAIL_FROM || 'no-reply@your-domain.com',
       to,
       subject,
-      react: billingEmailTemplate({ title, body })
+      html: `
+        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6">
+          <h2 style="margin:0 0 12px">${title}</h2>
+          <p>${body}</p>
+          <hr style="border:none;border-top:1px solid #eee;margin:20px 0" />
+          <p style="font-size:12px;color:#888">This email was sent automatically by LexiVine Billing.</p>
+        </div>
+      `,
     });
   } catch (e) {
     console.error('Resend send error:', e);
@@ -48,38 +54,60 @@ export async function POST(req: NextRequest) {
         let user = email ? await prisma.user.findUnique({ where: { email } }) : null;
         if (!user && email) {
           user = await prisma.user.create({
-            data: { email, name: email.split('@')[0] }
+            data: { email, name: email.split('@')[0] },
           });
         }
 
         if (user && customerId) {
           await prisma.user.update({
             where: { id: user.id },
-            data: { stripeCustomerId: customerId }
+            data: { stripeCustomerId: customerId },
           });
         }
 
+        if (user) {
+          await prisma.subscription.upsert({
+            where: { userId: user.id },
+            update: { plan: 'PRO', status: 'active' },
+            create: { userId: user.id, plan: 'PRO', status: 'active' },
+          });
+        }
+
+        await notify(email, '訂閱啟用成功', '感謝您的訂閱', '您的 Pro 訂閱已啟用。');
         break;
       }
 
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        const sub = event.data.object as Stripe.Subscription;
-        const stripeSubId = sub.id;
-        const status = sub.status;
-        const currentPeriodEnd = new Date(sub.current_period_end * 1000);
+        const sub = event.data.object as any;
+        const stripeSubId = sub.id as string;
+        const status = sub.status as string;
+        const currentPeriodEnd = sub.current_period_end
+          ? new Date(sub.current_period_end * 1000)
+          : undefined;
 
         await prisma.subscription.updateMany({
           where: { stripeSubId },
-          data: { status, currentPeriodEnd }
+          data: { status, ...(currentPeriodEnd ? { currentPeriodEnd } : {}) },
         });
+
+        try {
+          const c = (await stripe.customers.retrieve(sub.customer as string)) as any;
+          const email = c?.email as string | undefined;
+          await notify(email, '訂閱狀態更新', '訂閱已更新', `目前狀態：${status}`);
+        } catch (e) {
+          console.error('Fetch customer for notify failed:', e);
+        }
         break;
       }
+
+      default:
+        break;
     }
 
-    return new NextResponse('Webhook received', { status: 200 });
-  } catch (err: any) {
-    console.error('Webhook handler error:', err);
-    return new NextResponse('Internal server error', { status: 500 });
+    return NextResponse.json({ received: true });
+  } catch (e: any) {
+    console.error('Webhook handler error:', e);
+    return new NextResponse('Server Error', { status: 500 });
   }
 }
