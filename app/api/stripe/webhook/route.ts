@@ -48,7 +48,6 @@ export async function POST(req: NextRequest) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = session.customer as string | null;
-        const subId = (session.subscription as string) || null;
         const email = session.customer_details?.email as string | undefined;
 
         let user = email ? await prisma.user.findUnique({ where: { email } }) : null;
@@ -68,15 +67,8 @@ export async function POST(req: NextRequest) {
         if (user) {
           await prisma.subscription.upsert({
             where: { userId: user.id },
-            update: {
-              status: 'active',
-              ...(subId ? { stripeSubId: subId } : {}),
-            },
-            create: {
-              userId: user.id,
-              status: 'active',
-              ...(subId ? { stripeSubId: subId } : {}),
-            },
+            update: { status: 'active' },
+            create: { userId: user.id, status: 'active' },
           });
         }
 
@@ -87,24 +79,32 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
         const sub = event.data.object as any;
-        const stripeSubId = sub.id as string;
+        const customerId = sub.customer as string;
         const status = sub.status as string;
         const currentPeriodEnd = sub.current_period_end
           ? new Date(sub.current_period_end * 1000)
           : undefined;
 
-        await prisma.subscription.updateMany({
-          where: { stripeSubId },
-          data: { status, ...(currentPeriodEnd ? { currentPeriodEnd } : {}) },
+        // 透過 stripeCustomerId 找到 user，再用 userId 更新 subscription
+        const user = await prisma.user.findFirst({
+          where: { stripeCustomerId: customerId },
+          select: { id: true, email: true },
         });
 
-        try {
-          const c = (await stripe.customers.retrieve(sub.customer as string)) as any;
-          const email = c?.email as string | undefined;
-          await notify(email, '訂閱狀態更新', '訂閱已更新', `目前狀態：${status}`);
-        } catch (e) {
-          console.error('Fetch customer for notify failed:', e);
+        if (user) {
+          await prisma.subscription.updateMany({
+            where: { userId: user.id },
+            data: { status, ...(currentPeriodEnd ? { currentPeriodEnd } : {}) },
+          });
+
+          await notify(
+            user.email,
+            '訂閱狀態更新',
+            '訂閱已更新',
+            `目前狀態：${status}`
+          );
         }
+
         break;
       }
 
