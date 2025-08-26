@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = session.customer as string | null;
+        const subId = (session.subscription as string) || null;
         const email = session.customer_details?.email as string | undefined;
 
         let user = email ? await prisma.user.findUnique({ where: { email } }) : null;
@@ -67,8 +68,15 @@ export async function POST(req: NextRequest) {
         if (user) {
           await prisma.subscription.upsert({
             where: { userId: user.id },
-            update: { plan: 'PRO', status: 'active' },
-            create: { userId: user.id, plan: 'PRO', status: 'active' },
+            update: {
+              status: 'active',
+              ...(subId ? { stripeSubId: subId } : {}),
+            },
+            create: {
+              userId: user.id,
+              status: 'active',
+              ...(subId ? { stripeSubId: subId } : {}),
+            },
           });
         }
 
