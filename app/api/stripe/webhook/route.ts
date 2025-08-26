@@ -3,7 +3,6 @@ import Stripe from 'stripe';
 import { Resend } from 'resend';
 import { prisma } from '@/lib/prisma';
 
-export const config = { api: { bodyParser: false } };
 export const dynamic = 'force-dynamic';
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY as string;
