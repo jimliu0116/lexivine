@@ -1,7 +1,17 @@
 import type { NextAuthOptions } from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
 
+// NextAuth 設定
 export const authOptions: NextAuthOptions = {
-  providers: [],
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || ""
+    })
+  ],
   session: { strategy: "jwt" },
   secret: process.env.NEXTAUTH_SECRET
 };
+
+// 兼容用的 auth (避免 import 'auth' 錯誤)
+export const auth = authOptions;
